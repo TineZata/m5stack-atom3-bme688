@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build firmware",
+      "type": "shell",
+      "command": ". $HOME/export-esp.ps1; Remove-Item Env:IDF_TOOLS_PATH -ErrorAction SilentlyContinue; Remove-Item Env:ESP_IDF_TOOLS_INSTALL_DIR -ErrorAction SilentlyContinue; $env:PYTHON='C:/Users/tinez/AppData/Local/Programs/Python/Python312/python.exe'; $env:CARGO_TARGET_DIR='C:/temp/m5bme'; cargo +esp build",
+      "group": "build",
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "Flash firmware",
+      "type": "shell",
+      "command": ". $HOME/export-esp.ps1; $env:CARGO_TARGET_DIR='C:/temp/m5bme'; $env:ESP_IDF_TOOLS_INSTALL_DIR='C:/temp/e'; cargo +esp espflash flash --chip esp32s3 --target-dir C:/temp/m5bme",
+      "problemMatcher": []
+    },
+    {
+      "label": "Flash + monitor",
+      "type": "shell",
+      "command": ". $HOME/export-esp.ps1; $env:CARGO_TARGET_DIR='C:/temp/m5bme'; cargo +esp espflash flash --monitor --chip esp32s3 --target-dir C:/temp/m5bme",
+      "problemMatcher": []
+    }
+  ]
+}

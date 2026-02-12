@@ -1,0 +1,25 @@
+# Target chip configuration
+CONFIG_IDF_TARGET="esp32s3"
+
+# Flash and PSRAM configuration for AtomS3
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM=y
+
+# Compiler optimizations
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# Main task stack size (Rust needs more than C/C++)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
+
+# High-resolution timers
+CONFIG_FREERTOS_HZ=1000
+
+# Watchdog configuration
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+
+# USB CDC console for serial output
+CONFIG_ESP_CONSOLE_USB_CDC=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y

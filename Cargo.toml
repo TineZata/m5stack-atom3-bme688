@@ -1,0 +1,35 @@
+[package]
+name = "m5stack-atom3-bme688"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[package.metadata.esp-idf-sys]
+esp_idf_version = "v5.3.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[profile.dev]
+debug = true
+opt-level = "z"
+
+[features]
+default = []
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+esp-idf-svc = { version = "0.51", default-features = false, features = ["alloc"] }
+esp-idf-hal = "0.45"
+bme680 = "0.6"
+display-interface = "0.4"
+display-interface-spi = "0.4"
+mipidsi = "0.9"
+embedded-graphics = "0.8"
+embedded-hal-0-2 = { package = "embedded-hal", version = "0.2.7" }
+
+[build-dependencies]
+embuild = { version = "0.32", features = ["espidf"] }
