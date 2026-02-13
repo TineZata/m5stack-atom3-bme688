@@ -95,17 +95,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
 
 [[package]]
-name = "bme680"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c32c5b6119009885390651a97833af8cd0ad87bd4528bec9c8c0554778ef43"
-dependencies = [
- "bitflags 1.3.2",
- "embedded-hal 0.2.7",
- "log",
-]
-
-[[package]]
 name = "bstr"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -983,7 +972,6 @@ name = "m5stack-atom3-bme688"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bme680",
  "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
