@@ -19,17 +19,27 @@ opt-level = "z"
 [features]
 default = []
 
+# Main binary: Full BME688 sensor + display
+[[bin]]
+name = "m5stack-atom3-bme688"
+path = "src/main.rs"
+
+# Test binary: Display only (no sensor)
+[[bin]]
+name = "test_screen"
+path = "src/test_screen.rs"
+
 [dependencies]
 anyhow = "1"
 log = "0.4"
 esp-idf-svc = { version = "0.51", default-features = false, features = ["alloc"] }
 esp-idf-hal = "0.45"
 bme680 = "0.6"
-display-interface = "0.4"
-display-interface-spi = "0.4"
-mipidsi = "0.9"
+mipidsi = "0.9.0"
 embedded-graphics = "0.8"
 embedded-hal-0-2 = { package = "embedded-hal", version = "0.2.7" }
+embedded-hal = "1.0"
+heapless = "0.8"
 
 [build-dependencies]
 embuild = { version = "0.32", features = ["espidf"] }

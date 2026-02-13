@@ -1,181 +1,253 @@
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
-use bme680::{
-    Bme680, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder,
-};
-use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
-use embedded_graphics::text::{Baseline, Text};
+use embedded_graphics::primitives::{Primitive, PrimitiveStyle, Rectangle};
+use embedded_hal::spi::MODE_0;
 use esp_idf_hal::delay::Ets;
-use esp_idf_hal::gpio::{AnyInputPin, PinDriver};
-use esp_idf_hal::i2c::{config::Config as I2cConfig, I2cDriver};
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_hal::prelude::*;
-use esp_idf_hal::spi::{
-    config::{Config as SpiConfig, DriverConfig as SpiDriverConfig, MODE_0},
-    SpiDeviceDriver,
-};
+use esp_idf_hal::spi::{config::Config, SpiDeviceDriver, SpiDriverConfig};
 use log::info;
-use mipidsi::models::GC9107;
-use mipidsi::options::ColorOrder;
-use mipidsi::Builder;
+use mipidsi::{Builder, models::ST7789};
 use mipidsi::interface::SpiInterface;
+use mipidsi::options::{Orientation, Rotation};
 
-const LCD_W: u32 = 128;
-const LCD_H: u32 = 128;
+// Minimal 5x7 pixel font (stored as 5 bytes per character)
+// Each byte is a column, bits are pixels (1 = draw pixel)
+const FONT_5X7: [[u8; 5]; 96] = [
+    [0x00, 0x00, 0x00, 0x00, 0x00], // Space (32)
+    [0x00, 0x00, 0x5F, 0x00, 0x00], // !
+    [0x00, 0x07, 0x00, 0x07, 0x00], // "
+    [0x14, 0x7F, 0x14, 0x7F, 0x14], // #
+    [0x24, 0x2A, 0x7F, 0x2A, 0x12], // $
+    [0x23, 0x13, 0x08, 0x64, 0x62], // %
+    [0x36, 0x49, 0x55, 0x22, 0x50], // &
+    [0x00, 0x05, 0x03, 0x00, 0x00], // '
+    [0x00, 0x1C, 0x22, 0x41, 0x00], // (
+    [0x00, 0x41, 0x22, 0x1C, 0x00], // )
+    [0x14, 0x08, 0x3E, 0x08, 0x14], // *
+    [0x08, 0x08, 0x3E, 0x08, 0x08], // +
+    [0x00, 0x50, 0x30, 0x00, 0x00], // ,
+    [0x08, 0x08, 0x08, 0x08, 0x08], // -
+    [0x00, 0x60, 0x60, 0x00, 0x00], // .
+    [0x20, 0x10, 0x08, 0x04, 0x02], // /
+    [0x3E, 0x51, 0x49, 0x45, 0x3E], // 0
+    [0x00, 0x42, 0x7F, 0x40, 0x00], // 1
+    [0x42, 0x61, 0x51, 0x49, 0x46], // 2
+    [0x21, 0x41, 0x45, 0x4B, 0x31], // 3
+    [0x18, 0x14, 0x12, 0x7F, 0x10], // 4
+    [0x27, 0x45, 0x45, 0x45, 0x39], // 5
+    [0x3C, 0x4A, 0x49, 0x49, 0x30], // 6
+    [0x01, 0x71, 0x09, 0x05, 0x03], // 7
+    [0x36, 0x49, 0x49, 0x49, 0x36], // 8
+    [0x06, 0x49, 0x49, 0x29, 0x1E], // 9
+    [0x00, 0x36, 0x36, 0x00, 0x00], // :
+    [0x00, 0x56, 0x36, 0x00, 0x00], // ;
+    [0x08, 0x14, 0x22, 0x41, 0x00], // <
+    [0x14, 0x14, 0x14, 0x14, 0x14], // =
+    [0x00, 0x41, 0x22, 0x14, 0x08], // >
+    [0x02, 0x01, 0x51, 0x09, 0x06], // ?
+    [0x32, 0x49, 0x79, 0x41, 0x3E], // @
+    [0x7E, 0x11, 0x11, 0x11, 0x7E], // A
+    [0x7F, 0x49, 0x49, 0x49, 0x36], // B
+    [0x3E, 0x41, 0x41, 0x41, 0x22], // C
+    [0x7F, 0x41, 0x41, 0x22, 0x1C], // D
+    [0x7F, 0x49, 0x49, 0x49, 0x41], // E
+    [0x7F, 0x09, 0x09, 0x09, 0x01], // F
+    [0x3E, 0x41, 0x49, 0x49, 0x7A], // G
+    [0x7F, 0x08, 0x08, 0x08, 0x7F], // H
+    [0x00, 0x41, 0x7F, 0x41, 0x00], // I
+    [0x20, 0x40, 0x41, 0x3F, 0x01], // J
+    [0x7F, 0x08, 0x14, 0x22, 0x41], // K
+    [0x7F, 0x40, 0x40, 0x40, 0x40], // L
+    [0x7F, 0x02, 0x0C, 0x02, 0x7F], // M
+    [0x7F, 0x04, 0x08, 0x10, 0x7F], // N
+    [0x3E, 0x41, 0x41, 0x41, 0x3E], // O
+    [0x7F, 0x09, 0x09, 0x09, 0x06], // P
+    [0x3E, 0x41, 0x51, 0x21, 0x5E], // Q
+    [0x7F, 0x09, 0x19, 0x29, 0x46], // R
+    [0x46, 0x49, 0x49, 0x49, 0x31], // S
+    [0x01, 0x01, 0x7F, 0x01, 0x01], // T
+    [0x3F, 0x40, 0x40, 0x40, 0x3F], // U
+    [0x1F, 0x20, 0x40, 0x20, 0x1F], // V
+    [0x3F, 0x40, 0x38, 0x40, 0x3F], // W
+    [0x63, 0x14, 0x08, 0x14, 0x63], // X
+    [0x07, 0x08, 0x70, 0x08, 0x07], // Y
+    [0x61, 0x51, 0x49, 0x45, 0x43], // Z
+    [0x00, 0x7F, 0x41, 0x41, 0x00], // [
+    [0x02, 0x04, 0x08, 0x10, 0x20], // \
+    [0x00, 0x41, 0x41, 0x7F, 0x00], // ]
+    [0x04, 0x02, 0x01, 0x02, 0x04], // ^
+    [0x40, 0x40, 0x40, 0x40, 0x40], // _
+    [0x00, 0x01, 0x02, 0x04, 0x00], // `
+    [0x20, 0x54, 0x54, 0x54, 0x78], // a
+    [0x7F, 0x48, 0x44, 0x44, 0x38], // b
+    [0x38, 0x44, 0x44, 0x44, 0x20], // c
+    [0x38, 0x44, 0x44, 0x48, 0x7F], // d
+    [0x38, 0x54, 0x54, 0x54, 0x18], // e
+    [0x08, 0x7E, 0x09, 0x01, 0x02], // f
+    [0x0C, 0x52, 0x52, 0x52, 0x3E], // g
+    [0x7F, 0x08, 0x04, 0x04, 0x78], // h
+    [0x00, 0x44, 0x7D, 0x40, 0x00], // i
+    [0x20, 0x40, 0x44, 0x3D, 0x00], // j
+    [0x7F, 0x10, 0x28, 0x44, 0x00], // k
+    [0x00, 0x41, 0x7F, 0x40, 0x00], // l
+    [0x7C, 0x04, 0x18, 0x04, 0x78], // m
+    [0x7C, 0x08, 0x04, 0x04, 0x78], // n
+    [0x38, 0x44, 0x44, 0x44, 0x38], // o
+    [0x7C, 0x14, 0x14, 0x14, 0x08], // p
+    [0x08, 0x14, 0x14, 0x18, 0x7C], // q
+    [0x7C, 0x08, 0x04, 0x04, 0x08], // r
+    [0x48, 0x54, 0x54, 0x54, 0x20], // s
+    [0x04, 0x3F, 0x44, 0x40, 0x20], // t
+    [0x3C, 0x40, 0x40, 0x20, 0x7C], // u
+    [0x1C, 0x20, 0x40, 0x20, 0x1C], // v
+    [0x3C, 0x40, 0x30, 0x40, 0x3C], // w
+    [0x44, 0x28, 0x10, 0x28, 0x44], // x
+    [0x0C, 0x50, 0x50, 0x50, 0x3C], // y
+    [0x44, 0x64, 0x54, 0x4C, 0x44], // z
+    [0x00, 0x08, 0x36, 0x41, 0x00], // {
+    [0x00, 0x00, 0x7F, 0x00, 0x00], // |
+    [0x00, 0x41, 0x36, 0x08, 0x00], // }
+    [0x08, 0x08, 0x2A, 0x1C, 0x08], // ~
+    [0x00, 0x00, 0x00, 0x00, 0x00], // DEL
+];
 
-fn main() -> Result<()> {
+// Draw a single character at x,y using minimal stack
+fn draw_char<D>(display: &mut D, x: i32, y: i32, ch: char, color: Rgb565) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    let code = ch as usize;
+    if code < 32 || code > 127 {
+        return Ok(()); // Skip non-printable
+    }
+    
+    let glyph = &FONT_5X7[code - 32];
+    
+    // Draw each column of the character
+    for col in 0..5 {
+        let column_data = glyph[col];
+        // Draw each pixel in the column
+        for row in 0..8 {
+            if (column_data & (1 << row)) != 0 {
+                let px = embedded_graphics::primitives::Rectangle::new(
+                    Point::new(x + col as i32, y + row as i32),
+                    embedded_graphics::geometry::Size::new(1, 1)
+                )
+                .into_styled(PrimitiveStyle::with_fill(color));
+                px.draw(display)?;
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+// Draw text string character-by-character (minimal stack usage)
+fn draw_text<D>(display: &mut D, x: i32, y: i32, text: &str, color: Rgb565) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    let mut offset = 0;
+    for ch in text.chars() {
+        draw_char(display, x + offset, y, ch, color)?;
+        offset += 6; // 5px width + 1px spacing
+    }
+    Ok(())
+}
+
+fn main() {
+    // Initialize system
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    let peripherals = Peripherals::take().context("Peripherals unavailable")?;
+    info!("=== AtomS3 Display Clear Test ===");
+    
+    let peripherals = Peripherals::take().expect("Failed to get peripherals");
+    info!("Peripherals OK!");
 
-    let i2c = I2cDriver::new(
-        peripherals.i2c0,
-        peripherals.pins.gpio2,
-        peripherals.pins.gpio1,
-        &I2cConfig::new().baudrate(400.kHz().into()),
-    )
-    .context("Failed to init I2C")?;
+    // Enable backlight - GPIO16 confirmed working
+    info!("Enabling backlight on GPIO16");
+    let mut backlight = PinDriver::output(peripherals.pins.gpio16).expect("backlight pin");
+    backlight.set_high().expect("backlight on");
+    
+    thread::sleep(Duration::from_millis(100));
+    
+    // Setup LCD pins
+    let pin_sclk = peripherals.pins.gpio17;
+    let pin_mosi = peripherals.pins.gpio21;
+    let pin_cs = peripherals.pins.gpio15;
+    let pin_dc = peripherals.pins.gpio33;
+    let mut lcd_reset = PinDriver::output(peripherals.pins.gpio34).expect("reset pin");
+
+    // Reset LCD
+    info!("LCD Reset");
+    lcd_reset.set_low().expect("reset low");
+    thread::sleep(Duration::from_millis(100));
+    lcd_reset.set_high().expect("reset high");
+    thread::sleep(Duration::from_millis(200));
+
+    // Setup SPI with MODE_0 (per M5GFX)
+    info!("SPI init with MODE_0");
+    let spi_config = Config::new()
+        .baudrate(26.MHz().into())
+        .data_mode(MODE_0);
+
+    let device = SpiDeviceDriver::new_single(
+        peripherals.spi2,
+        pin_sclk,
+        pin_mosi,
+        Option::<esp_idf_hal::gpio::AnyInputPin>::None,
+        Some(pin_cs),
+        &SpiDriverConfig::new(),
+        &spi_config,
+    ).expect("SPI device");
+
+    let pin_dc_out = PinDriver::output(pin_dc).expect("DC pin");
+    
+    // Create display interface with buffer
+    let mut buffer = [0u8; 512];
+    let di = SpiInterface::new(device, pin_dc_out, &mut buffer);
 
     let mut delay = Ets;
-    let mut bme = Bme680::init(i2c, &mut delay, I2CAddress::Primary)
-        .map_err(|e| anyhow::anyhow!("Failed to init BME688/BME680 at 0x76: {:?}", e))?;
 
-    let bme_settings = SettingsBuilder::new()
-        .with_humidity_oversampling(OversamplingSetting::OS2x)
-        .with_pressure_oversampling(OversamplingSetting::OS4x)
-        .with_temperature_oversampling(OversamplingSetting::OS8x)
-        .with_temperature_filter(IIRFilterSize::Size3)
-        .with_gas_measurement(Duration::from_millis(150), 320, 25)
-        .with_run_gas(true)
-        .build();
-
-    bme.set_sensor_settings(&mut delay, bme_settings)
-        .map_err(|e| anyhow::anyhow!("Failed to apply BME settings: {:?}", e))?;
-
-    let profile_dur = bme
-        .get_profile_dur(&bme_settings.0)
-        .map_err(|e| anyhow::anyhow!("Failed to calculate BME profile duration: {:?}", e))?;
-
-    let mut lcd_bl = PinDriver::output(peripherals.pins.gpio38)?;
-    lcd_bl.set_high()?;
-
-    let lcd_dc = PinDriver::output(peripherals.pins.gpio33)?;
-    let lcd_rst = PinDriver::output(peripherals.pins.gpio34)?;
-
-    let spi = SpiDeviceDriver::new_single(
-        peripherals.spi3,
-        peripherals.pins.gpio17,
-        peripherals.pins.gpio21,
-        Option::<AnyInputPin>::None,
-        Some(peripherals.pins.gpio15),
-        &SpiDriverConfig::new(),
-        &SpiConfig::new().baudrate(40.MHz().into()).data_mode(MODE_0),
-    )
-    .context("Failed to init LCD SPI")?;
-
-    let mut spi_buffer = [0u8; 256]; // Smaller buffer for display operations
-    let di = SpiInterface::new(spi, lcd_dc, &mut spi_buffer);
-
-    let mut display = Builder::new(GC9107, di)
-        .reset_pin(lcd_rst)
-        .display_size(LCD_W as u16, LCD_H as u16)
-        .color_order(ColorOrder::Bgr)
+    info!("Initializing display");
+    let mut display = Builder::new(ST7789, di)
+        .reset_pin(lcd_reset)
+        .display_size(128, 128)  // AtomS3 is 128x128
+        .display_offset(0, 0)    // No offset
         .init(&mut delay)
-        .map_err(|e| anyhow::anyhow!("Failed to init GC9107 display: {:?}", e))?;
+        .expect("display init");
 
-    render_lines(
-        &mut display,
-        &["AtomS3 + BME688", "Booting...", "", "Waiting data..."],
-    )
-    .context("Initial LCD draw failed")?;
-
-    let mut gas_baseline_ohm: Option<f32> = None;
-
+    
+    // Clear screen to black
+    info!("Clearing display to black");
+    display.clear(Rgb565::BLACK).expect("clear");
+    
+    info!("Display cleared! Should see solid black screen.");
+    display.set_orientation(Orientation::default().rotate(Rotation::Deg180)).unwrap();
+    
+    // Draw text with custom minimal font renderer (no stack overflow!)
+    info!("Drawing text with custom 5x7 font");
+    draw_text(&mut display, 10, 20, "Hello Rust!", Rgb565::WHITE).unwrap();
+    draw_text(&mut display, 10, 35, "Temp: 25.3C", Rgb565::GREEN).unwrap();
+    draw_text(&mut display, 10, 50, "No overflow!", Rgb565::CYAN).unwrap();
+    
+    info!("Text drawn successfully!");
+    
+    // Idle loop
+    let mut counter = 0;
     loop {
-        bme.set_sensor_mode(&mut delay, PowerMode::ForcedMode)
-            .map_err(|e| anyhow::anyhow!("Failed to trigger forced BME measurement: {:?}", e))?;
-
-        thread::sleep(profile_dur);
-
-        let (data, _status) = bme
-            .get_sensor_data(&mut delay)
-            .map_err(|e| anyhow::anyhow!("Failed to read BME measurement: {:?}", e))?;
-
-        let temperature_c = data.temperature_celsius() as f32;
-        let pressure_hpa = data.pressure_hpa() as f32;
-        let humidity_pct = data.humidity_percent() as f32;
-        let gas_ohm = data.gas_resistance_ohm();
-
-        let baseline = gas_baseline_ohm.get_or_insert(gas_ohm as f32);
-        *baseline = (*baseline * 0.99) + ((gas_ohm as f32) * 0.01);
-
-        let voc_proxy_index = ((*baseline / gas_ohm as f32) * 100.0).clamp(25.0, 500.0);
-        let quality = if voc_proxy_index < 80.0 {
-            "Great"
-        } else if voc_proxy_index < 140.0 {
-            "Good"
-        } else if voc_proxy_index < 220.0 {
-            "Moderate"
-        } else {
-            "Poor"
-        };
-
-        info!(
-            "T:{:.1}C P:{:.1}hPa H:{:.1}% Gas:{}Ohm VOCx:{:.0} ({})",
-            temperature_c,
-            pressure_hpa,
-            humidity_pct,
-            gas_ohm,
-            voc_proxy_index,
-            quality
-        );
-
-        let l0 = "AtomS3 + BME688".to_owned();
-        let l1 = format!("T {:>5.1} C", temperature_c);
-        let l2 = format!("P {:>6.1} hPa", pressure_hpa);
-        let l3 = format!("H {:>6.1} %", humidity_pct);
-        let l4 = format!("Gas {:>6} ohm", gas_ohm);
-        let l5 = format!("VOCx {:>5.0} {}", voc_proxy_index, quality);
-
-        render_lines(
-            &mut display,
-            &[l0.as_str(), l1.as_str(), l2.as_str(), l3.as_str(), l4.as_str(), l5.as_str()],
-        )
-        .context("LCD draw failed")?;
-
-        thread::sleep(Duration::from_millis(1000));
+        if counter % 10 == 0 {
+            display.clear(Rgb565::BLACK).expect("clear");
+            info!("Display showing... Counter: {}", counter);
+            draw_text(&mut display, 10, 85, &format!("counter {}", counter), Rgb565::CYAN).unwrap();
+        }
+        counter += 1;
+        thread::sleep(Duration::from_secs(1));
     }
-}
-
-fn render_lines<D>(display: &mut D, lines: &[&str]) -> Result<()>
-where
-    D: DrawTarget<Color = Rgb565>,
-    D::Error: core::fmt::Debug,
-{
-    let bg = PrimitiveStyle::with_fill(Rgb565::BLACK);
-    Rectangle::new(Point::new(0, 0), Size::new(LCD_W, LCD_H))
-        .into_styled(bg)
-        .draw(display)
-        .map_err(|e| anyhow::anyhow!("clear failed: {e:?}"))?;
-
-    let style = MonoTextStyleBuilder::new()
-        .font(&FONT_6X10)
-        .text_color(Rgb565::GREEN)
-        .build();
-
-    let mut y = 3;
-    for line in lines {
-        Text::with_baseline(line, Point::new(3, y), style, Baseline::Top)
-            .draw(display)
-            .map_err(|e| anyhow::anyhow!("text draw failed: {e:?}"))?;
-        y += 11;
-    }
-
-    Ok(())
 }

@@ -17,13 +17,16 @@ Rust starter project for reading a BME688 over I2C and showing values on AtomS3'
 Default pin map in `src/main.rs`:
 
 - **BME688 (external Port / HY2.0):** `SDA=GPIO2`, `SCL=GPIO1`, address `0x76`
-- **AtomS3 LCD (GC9107):**
+- **AtomS3 LCD (GC9107 controller, using ST7789 driver in compatibility mode):**
   - `SCLK=GPIO17`
   - `MOSI=GPIO21`
   - `CS=GPIO15`
   - `DC=GPIO33`
   - `RST=GPIO34`
-  - `BL=GPIO38`
+  - `BL=GPIO16` ← **Backlight (confirmed from M5GFX source)**
+  - **SPI Mode:** `MODE_0` (per official M5Stack implementation)
+
+**Note:** The AtomS3 uses a GC9107 display controller, but since `mipidsi` doesn't support GC9107, we use the ST7789 driver in compatibility mode with SPI MODE_0.
 
 If your wiring differs, edit the constants in `src/main.rs`.
 
