@@ -6,6 +6,7 @@ resolver = "2"
 
 [package.metadata.esp-idf-sys]
 esp_idf_version = "v5.3.2"
+esp_idf_sdkconfig_defaults = "sdkconfig.defaults"
 
 [profile.release]
 opt-level = "s"

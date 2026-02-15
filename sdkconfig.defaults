@@ -4,14 +4,16 @@ CONFIG_IDF_TARGET="esp32s3"
 # Flash and PSRAM configuration for AtomS3
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
-CONFIG_SPIRAM_MODE_OCT=y
-CONFIG_SPIRAM=y
+# Note: SPIRAM/PSRAM disabled - was causing boot crash.
+# Re-enable only if your specific AtomS3 variant has PSRAM.
+# CONFIG_SPIRAM_MODE_OCT is not set
+# CONFIG_SPIRAM is not set
 
 # Compiler optimizations
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 
 # Main task stack size (Rust needs more than C/C++)
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=1048576
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 
 # High-resolution timers
 CONFIG_FREERTOS_HZ=1000
@@ -20,6 +22,11 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 
+# Power management (enables light sleep for battery conservation)
+CONFIG_PM_ENABLE=y
+
 # USB CDC console for serial output
-CONFIG_ESP_CONSOLE_USB_CDC=y
-CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# Note: USB_CDC can cause boot loops when flashing via USB-JTAG.
+# Use default UART console which works reliably with espflash --monitor.
+# CONFIG_ESP_CONSOLE_USB_CDC is not set
+# CONFIG_ESP_CONSOLE_SECONDARY_NONE is not set
