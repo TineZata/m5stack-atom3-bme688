@@ -22,8 +22,7 @@ const BME688_ADDR: u8 = 0x76;
 const BME688_ADDR_ALT: u8 = 0x77;  // Alternate address
 const BME688_CHIP_ID_REG: u8 = 0xD0;
 const BME688_RESET_REG: u8 = 0xE0;
-const BME688_STATUS_REG: u8 = 0x1D;
-const BME688_MEAS_STATUS_REG: u8 = 0x1D;  // Shows if measurement is in progress
+const BME688_MEAS_STATUS_REG: u8 = 0x1D;  // meas_status_0: new_data, measuring, gas_measuring
 const BME688_CTRL_HUM_REG: u8 = 0x72;
 const BME688_CTRL_MEAS_REG: u8 = 0x74;
 const BME688_CONFIG_REG: u8 = 0x75;
@@ -50,8 +49,9 @@ const GAS_RANGE_K2: [f32; 16] = [
     1953.125, 976.5625, 488.28125, 244.140625,
 ];
 
-// Backlight brightness: constant 50% PWM to save power
-const BACKLIGHT_PCT: u32 = 50;
+// Backlight brightness — keep at 100% so TailBat sees enough current draw
+// (TailBat auto-shuts-off when load stays below ~50 mA for too long)
+const BACKLIGHT_PCT: u32 = 100;
 
 // Total cycle time between sensor reads (seconds between display updates)
 const CYCLE_INTERVAL_MS: u64 = 3_000;
@@ -825,6 +825,10 @@ fn main() {
         // Print stack info every 10 iterations
         if loop_count % 10 == 0 {
             log_memory_stats("sensor loop");
+            backlight.set_duty(max_duty).expect("backlight on");
+        }
+        else {
+            backlight.set_duty(max_duty * 50 / 100).expect("backlight on");
         }
         loop_count += 1;
         
