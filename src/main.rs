@@ -311,9 +311,10 @@ fn iaq_label(iaq: u16) -> &'static str {
     match iaq {
         0..=50 => "Excellent",
         51..=100 => "Good",
-        101..=150 => "Moderate",
-        151..=200 => "Poor",
-        201..=300 => "Unhealthy",
+        101..=150 => "Lightly Polluted",
+        151..=200 => "Moderately Polluted",
+        201..=250 => "Heavily Polluted",
+        251..=350 => "Severely Polluted",
         _ => "Hazardous",
     }
 }
@@ -933,8 +934,8 @@ fn main() {
                 let _ = write!(line_buf, "---");
             }
             let iaq_c = if iaq < 999 { iaq_color(iaq) } else { Rgb565::new(16, 16, 16) };
-            draw_text(&mut display, 5, 73, "AQ:", iaq_c).ok();
-            draw_text(&mut display, 30, 73, line_buf.as_str(), iaq_c).ok();
+            draw_text(&mut display, 5, 73, "IAQ:", iaq_c).ok();
+            draw_text(&mut display, 31, 73, line_buf.as_str(), iaq_c).ok();
 
             // IAQ label on next line
             let label = if iaq < 999 { iaq_label(iaq) } else { "Warming up" };
